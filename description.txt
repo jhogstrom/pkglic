@@ -1,0 +1,1 @@
+The purpose of this helper app is to make it fast and easy to get an understanding of which open source licenses you are using in your application.
