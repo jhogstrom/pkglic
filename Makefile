@@ -1,21 +1,22 @@
-.PHONY: dist clean setup check testpublish publish
+.PHONY: dist build clean setup check test testpublish publish
 
-dist:
+build dist: clean
 	python -m build
+	twine check dist/*
 
 clean:
-	rmdir dist build
+	rm -rf dist/ build/
 
 setup:
 	pip install -r requirements.txt -r dev-requirements.txt
 
-check:
+test check:
 	pkglic/pkglic.py -f requirements.txt
 	pkglic/pkglic.py -f sampledata/package.json
 	pkglic/pkglic.py -f sampledata/sample.csproj
 	pkglic/pkglic.py -f sampledata/packages.config
 
-publish:
+publish: build
 	twine upload $(REPO) dist/* --config-file .pypirc
 
 testpublish: REPO=--repository testpypi

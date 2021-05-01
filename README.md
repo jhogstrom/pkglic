@@ -1,4 +1,5 @@
-# PkgLic
+PkgLic
+======
 
 The purpose of this helper app is to make it fast and easy to get an understanding of which open source licenses you are using in your application.
 
@@ -34,7 +35,9 @@ optional arguments:
   -v, --verbose         Increase verbosity.
   ```
 
-# Installation
+Installation
+============
+
 Either install it from pypi
 ```
 pip install pkglic
@@ -42,19 +45,23 @@ pip install pkglic
 
 or download the sources and make sure your environment has the required packages installed (`pip install -r requirements.txt`) and invoke the script from wherever you store it. You may for instance want to check it in with the rest of your build tools.
 
-# Supported formats
-## Python
+Supported formats
+=================
+
+Python
+------
 Any file path containing "requirements.txt" will be analyzed as a requirements file as supported by [pip](https://pip.pypa.io/en/stable/cli/pip_install/).
 
 http://pypi.org is used to fetch the meta data.
 
-## Javascript
+Javascript
+----------
 Any file path containing "package.json" will be analyzed as a package.json file. Only the "dependencies" block will be checked!
 
 https://npmjs.org is used to fetch the meta data.
 
-## Nuget
-
+Nuget
+-----
 Any file containing ".csproj" will be analyzed as a C# project and the nuget packages extracted for analysis.
 
 Any file containing "packages.config" will be analyzed as a nuget packages file (an older way to specify nuget dependencies).
@@ -63,14 +70,16 @@ Any file containing "packages.config" will be analyzed as a nuget packages file 
 https://nuget.org is used to fetch the meta data.
 
 
-# Hard check on licenses
+Hard check on licenses
+======================
 
 Some projects prefer to avoid certain OSS licenses. This was actually the main reason for writing the tool. There are many ways to accomplish such a verification, including using the switch `-u` or `--unwanted` - for instance `-u GPL` or `-unwanted "MIT License"`.
 
 Adding the `-u` switch will first print all packages and their licenses, then print out all packages that match any unwanted license and finally *terminate with an error code, breaking the build*.
 
 
-# Updating wiki pages
+Updating wiki pages
+===================
 
 All output is written to `stdout`, so something like
 ```
@@ -79,7 +88,8 @@ wikiupdater --host wiki.intranet --target-page licenses --upload /tmp/licenses_i
 ```
 will do the trick (assuming you have a tool called wikiupdater etc etc).
 
-# Scanning all files in a tree
+Scanning all files in a tree
+============================
 
 If you have scattered your requirements.txt throughout your source tree, and even separated the development packages into dev-requirements.txt, you can use the existing tools to `find` all files and then add them to the command lline using `xargs`.
 
@@ -98,8 +108,8 @@ Note that adding multiple files may result in duplication of packages, if they a
 find -iname '*requirements.txt' | xargs pkglic -f | uniq
 ```
 
-# Modifying the output
-
+Modifying the output
+====================
 If you are reasonably satisfied with the standard output format, but want to tweak it just a little, you can for instance remove the type indicator easily using `sed`.
 ```
 find -iname '*requirements.txt' | xargs pkglic -f | | sed -e "s/\[.*\] //"
@@ -134,7 +144,8 @@ The output file has the following format:
 }
 ```
 
-# License types
+License types
+=============
 
 The license type will be set to whatever the package specifies. However, in some cases the license cannot be determined. If so, the following applies:
 

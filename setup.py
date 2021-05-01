@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 
 from setuptools import setup, find_packages  # Always prefer setuptools over distutils
-from codecs import open  # To use a consistent encoding
 from os import path
 
 here = path.abspath(path.dirname(__file__))
@@ -13,7 +12,7 @@ with open(path.join(here, 'README.md'), encoding='utf-8') as f:
 
 setup(
     name='pkglic',
-    version='1.0.1',
+    version='1.0.3',
     author='Jesper Högström',
     author_email='jspr.hgstrm@gmail.com',
     license='MIT',
@@ -42,6 +41,7 @@ setup(
         ]
     },
     description='Script to get the licenses of components used by js, py or c# apps.',
+    long_description_content_type="text/markdown",
     long_description=long_description,
     install_requires=[
         'requests',
