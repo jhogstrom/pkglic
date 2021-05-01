@@ -13,6 +13,7 @@ from typing import List, Type
 import concurrent.futures
 from lxml import etree
 from collections import defaultdict
+from pprint import pprint
 
 SORTORDER = {
     0: lambda x: [x.type(), x.name],
@@ -31,10 +32,27 @@ class PackageInfo:
         self.filename = filename
         self.license = "NOT_DOWNLOADED"
         self.licenseurl = ""
+        self.author = None
+        self.author_email = None
+        self.home_page = None
+        self.summary = None
 
     def __str__(self):
         name = f"{self.name} v{self.version}"
         return f"[{self.type()}] {name:30} {self.license} {self.licenseurl}".strip()
+
+    def asjson(self):
+        return {
+            "name": self.name,
+            "version": self.version,
+            "license": self.license,
+            "licenseurl": self.licenseurl,
+
+            "author": self.author,
+            "author_email": self.author_email,
+            "home_page": self.home_page,
+            "summary": self.summary
+        }
 
 
 class NpmPackageInfo(PackageInfo):
@@ -48,7 +66,16 @@ class NpmPackageInfo(PackageInfo):
 
     def update_metadata(self, s: str) -> None:
         d = json.loads(s)
+
         self.license = d.get("license", "NOT_SPECIFIED")
+
+        author = d.get("author")
+        if author is not None:
+            self.author = author.get("name")
+            self.author_email = author.get("email")
+        self.home_page = d.get("home_page")
+        self.summary = d.get("description")
+
 
     @classmethod
     def can_parse(self, filename: str) -> bool:
@@ -70,7 +97,7 @@ class NpmPackageInfo(PackageInfo):
             # https://docs.npmjs.com/about-semantic-versioning
             return v.replace(".x", ".0").replace("~", "").replace("^", "")
 
-        dependencies = json.load(open(filename)).get("dependencies", [])
+        dependencies = json.load(open(filename)).get("dependencies", {})
         return [NpmPackageInfo(name, clean_version(version), filename) for name, version in dependencies.items()]
 
 
@@ -87,8 +114,12 @@ class PythonPackageInfo(PackageInfo):
 
     def update_metadata(self, s: str) -> None:
         d = json.loads(s)
-        self.license = d.get("info", []).get("license", "NOT_SPECIFIED")
-        self.version = d.get("info", []).get("version", "??")
+        self.license = d.get("info", {}).get("license", "NOT_SPECIFIED")
+        self.version = d.get("info", {}).get("version", "??")
+        self.author = d.get("info", {}).get("author")
+        self.author_email = d.get("info", {}).get("author_email")
+        self.home_page = d.get("info", {}).get("home_page")
+        self.summary = d.get("info", {}).get("summary")
 
     @classmethod
     def can_parse(self, filename: str) -> bool:
@@ -126,7 +157,6 @@ class PythonPackageInfo(PackageInfo):
             else:
                 name = name.group(1).strip()
 
-            # name, *version = f.split("==") + [None]
             fetchinfo.append(PythonPackageInfo(name, version, filename))
         return fetchinfo
 
@@ -166,6 +196,7 @@ class CSharpPackageInfo(PackageInfo):
 
     def update_metadata(self, s: str) -> None:
         # https://docs.microsoft.com/en-us/nuget/reference/nuspec
+        # print(s)
 
         doc = etree.XML(s)
         #
@@ -197,6 +228,10 @@ class CSharpPackageInfo(PackageInfo):
                 self.license = f"{lictype}: {licvalue}"
         else:
             self.license = "NOT_SPECIFIED"
+
+        self.author = (doc.xpath(f"//{namespace}authors/text()", namespaces=nsmap) + [None])[0]
+        self.home_page = (doc.xpath(f"//{namespace}projectUrl/text()", namespaces=nsmap) + [None])[0]
+        self.summary = (doc.xpath(f"//{namespace}description/text()", namespaces=nsmap) + [None])[0]
 
 
 class NugetPackageInfo(CSharpPackageInfo):
@@ -385,12 +420,38 @@ def init_argparse() -> argparse.ArgumentParser:
         "-v", "--verbose",
         action="store_true",
         help="Increase verbosity.")
+    parser.add_argument(
+        "--json",
+        metavar="file",
+        type=str,
+        default=None,
+        help="Output as json-string to <file>.")
+
 
     # Automatically add the parameter file args.txt if it exists.
     if os.path.exists("args.txt") and "@args.txt" not in sys.argv:
         sys.argv.append("@args.txt")
 
     return parser
+
+
+def print_packages_to_json(packages: List[PackageInfo], filename: str) -> None:
+    """
+    Generate a json-string with all packages and write to 'filename'.
+
+    Args:
+        packages (List[PackageInfo]): List of PackageInfo
+        filename (str): File to write to.
+    """
+    res = {
+        "generator": f"{PROGRAM_NAME} (c) Jesper Hogstrom 2021",
+        "generated": datetime.datetime.now().strftime('%Y-%m-%d %H:%M'),
+        "packages": [p.asjson() for p in packages]
+    }
+
+    with open(filename, "w") as f:
+        f.write(json.dumps(res))
+    print(f"\nJson-data written to '{filename}'.")
 
 
 def main():
@@ -401,6 +462,8 @@ def main():
 
     packages = acquire_package_info(args.files, args.type, args.verbose)
     print_package_info(packages, SORTORDER[args.order])
+    if args.json is not None:
+        print_packages_to_json(packages, args.json)
     if detect_unwanted_licenses(packages, args.unwanted):
         print("Exiting with error level!")
         exit(1)

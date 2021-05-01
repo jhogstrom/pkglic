@@ -1,5 +1,6 @@
 act.bat
 deact.bat
+.pypirc
 build
 dist
 pkglic.egg-info

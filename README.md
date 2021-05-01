@@ -34,18 +34,26 @@ optional arguments:
   -v, --verbose         Increase verbosity.
   ```
 
-## Supported formats
-### Python
+# Installation
+Either install it from pypi
+```
+pip install pkglic
+```
+
+or download the sources and make sure your environment has the required packages installed (`pip install -r requirements.txt`) and invoke the script from wherever you store it. You may for instance want to check it in with the rest of your build tools.
+
+# Supported formats
+## Python
 Any file path containing "requirements.txt" will be analyzed as a requirements file as supported by [pip](https://pip.pypa.io/en/stable/cli/pip_install/).
 
 http://pypi.org is used to fetch the meta data.
 
-### Javascript
+## Javascript
 Any file path containing "package.json" will be analyzed as a package.json file. Only the "dependencies" block will be checked!
 
 https://npmjs.org is used to fetch the meta data.
 
-### Nuget
+## Nuget
 
 Any file containing ".csproj" will be analyzed as a C# project and the nuget packages extracted for analysis.
 
@@ -92,11 +100,39 @@ find -iname '*requirements.txt' | xargs pkglic -f | uniq
 
 # Modifying the output
 
-Remove the type indicator easily using `sed`.
+If you are reasonably satisfied with the standard output format, but want to tweak it just a little, you can for instance remove the type indicator easily using `sed`.
 ```
 find -iname '*requirements.txt' | xargs pkglic -f | | sed -e "s/\[.*\] //"
 ```
 
+For heavy duty modification, add `--json <file>` to the argument list. That will yield standard output on stdout and a list of dictionaries in `<file>`. This should be easy enough to import into some other tool to generate a nifty report or a credits page.
+```
+pkglic -f requirements.txt --json licenses.json
+generate_credits -i licenses.lic > credits-html
+```
+(assuming you have a tool `generate_credits` etc etc)
+
+The output file has the following format:
+```
+{
+    "generator": "pkglic (c) Jesper Hogstrom 2021",
+    "generated": "date of execution in iso-format",
+    "packages":
+    [
+        {
+            "name": <packageid>,
+            "version": <version>,
+            "license": <license type or filename with license (prefixed by 'file: ')>,
+            "licenseurl": <url with license text or null>,
+            "author": <author or null>,
+            "author_email": <author's email or null>,
+            "home_page": <url to project's home page or null>,
+            "summary": <summary or null>
+        },
+        ...
+    ]
+}
+```
 
 # License types
 
@@ -104,4 +140,3 @@ The license type will be set to whatever the package specifies. However, in some
 
 * The meta data could not be downloaded: 404_NOT_FOUND
 * The license node not present: NOT_SPECIFIED
-
