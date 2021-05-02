@@ -334,13 +334,18 @@ def get_parser(filename: str, default_type: str) -> Type:
             return p
 
 
-def acquire_package_info(filenames: List[str], default_type: str, verbose: bool) -> List[PackageInfo]:
+def acquire_package_info(
+        filenames: List[str],
+        default_type: str,
+        verbose: bool,
+        exclude_packages: List[str]) -> List[PackageInfo]:
     """
     Download the metadata for all packages.
 
     Args:
         default_type (str): Default type if not possible to determine from file names.
         verbose (bool): Increase verbosity if True.
+        exclude_packages: (List[str]): List of packages to exclude from checking.
 
     Returns:
         list: List of PackageInfo instances.
@@ -349,6 +354,8 @@ def acquire_package_info(filenames: List[str], default_type: str, verbose: bool)
     for filename in filenames:
         parser = get_parser(filename, default_type)
         packages += parser.parse(filename)
+
+    packages = [p for p in packages if p.name not in exclude_packages]
 
     fetch_package_infos(packages, verbose)
     return packages
@@ -442,6 +449,12 @@ def init_argparse() -> argparse.ArgumentParser:
         type=str,
         default=None,
         help="Read whitelisted packages form <file>.")
+    parser.add_argument(
+        "-x", "--exclude",
+        metavar="file",
+        type=str,
+        default=None,
+        help="Do not check (or list) excluded packages.")
 
     # Automatically add the parameter file args.txt if it exists.
     if os.path.exists("args.txt") and "@args.txt" not in sys.argv:
@@ -472,6 +485,15 @@ def print_packages_to_json(packages: List[PackageInfo], filename: str) -> None:
 
 
 def get_whitelisted(filename: str) -> dict:
+    """
+    Read the whitelist file and return as a dictionary.
+
+    Args:
+        filename (str): Name of file to read.
+
+    Returns:
+        dict: Dictionary with whitelist info.
+    """
     if filename is None:
         logger.debug("No whitelist-file.")
         return None
@@ -501,6 +523,16 @@ def get_whitelisted(filename: str) -> dict:
 
 
 def apply_whitelisting(packages: List[PackageInfo], whitelisting: dict) -> List[PackageInfo]:
+    """
+    Apply the whitelisting information and update `packages`.
+
+    Args:
+        packages (List[PackageInfo]): List of PackageInfo instances.
+        whitelisting (dict): Whitelisting information.
+
+    Returns:
+        List[PackageInfo]: Updated list of PackageInfo with whitelisting information applied.
+    """
     if whitelisting is None:
         return packages
     res = []
@@ -527,16 +559,35 @@ def apply_whitelisting(packages: List[PackageInfo], whitelisting: dict) -> List[
     return res
 
 
+def get_excluded(filename: str) -> List[str]:
+    """
+    Retrieve excluded packages from `filename`.
+
+    Args:
+        filename (str): Textfile listing excluded packages.
+
+    Returns:
+        List[str]: List of packages not to check.
+    """
+    if filename is None:
+        return []
+
+    with open(filename) as f:
+        return [l.strip() for l in f.readlines() if not l.strip().startswith("#")]
+
+
 def main():
     print(f"{authinfo.PROGRAM_NAME} {authinfo.VERSION} - (c) {authinfo.AUTHOR} 2021.")
     print(f"Executed {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}.\n")
     parser = init_argparse()
     args = parser.parse_args()
 
+    exclude_packages = get_excluded(args.exclude)
+
     whitelisting = get_whitelisted(args.whitelist)
     pprint(whitelisting)
 
-    packages = acquire_package_info(args.files, args.type, args.verbose)
+    packages = acquire_package_info(args.files, args.type, args.verbose, exclude_packages)
     packages = apply_whitelisting(packages, whitelisting)
     print_package_info(packages, SORTORDER[args.order])
     if detect_unwanted_licenses(packages, args.unwanted):

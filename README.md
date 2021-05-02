@@ -36,6 +36,8 @@ optional arguments:
   --json file           Output as json-string to <file>.
   -w file, --whitelist file
                         Read whitelisted packages form <file>.
+  -x file, --exclude file
+                        Do not check (or list) excluded packages.
   ```
 
 Installation
@@ -78,7 +80,9 @@ In some cases you'll find a package that lists as NOT_SPECIFIED or 404_NOT_FOUND
 
 The textfile has the following format:
 ```
+[# comment lines are allowed]
 <package_name>[: <expected_license>[ -> <map_to_license>]]
+...
 ```
 
 Valid examples are
@@ -103,6 +107,12 @@ If written as json, the following is eqiuvalent:
     "barbaz": {"expected": ""404_NOT_FOUND", "mapto": "MIT"}
 }
 ```
+
+Exclude packages
+================
+Some packages you may want to exclude. Maybe because they are your own. Maybe because some other reason. Fear not. Simply list them in a text file and add `--exclude <file>` as an argument. The packages listed in the file (case sensitive) will be excluded from any output - their meta data will not even be fetched!
+
+The file format is simple. One package per line. Lines starting with "#" are considered comments. You cannot add comments after the package name.
 
 Hard check on licenses
 ======================
