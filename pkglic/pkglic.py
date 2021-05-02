@@ -14,6 +14,7 @@ import concurrent.futures
 from lxml import etree
 from collections import defaultdict
 from pprint import pprint
+from authinfo import *
 
 SORTORDER = {
     0: lambda x: [x.type(), x.name],
@@ -21,8 +22,6 @@ SORTORDER = {
     2: lambda x: [x.type(), x.license],
     3: "g"
 }
-
-PROGRAM_NAME = "pkglic"
 
 
 class PackageInfo:
@@ -444,7 +443,7 @@ def print_packages_to_json(packages: List[PackageInfo], filename: str) -> None:
         filename (str): File to write to.
     """
     res = {
-        "generator": f"{PROGRAM_NAME} (c) Jesper Hogstrom 2021",
+        "generator": f"{PROGRAM_NAME} {VERSION} (c) {AUTHOR} 2021",
         "generated": datetime.datetime.now().strftime('%Y-%m-%d %H:%M'),
         "packages": [p.asjson() for p in packages]
     }
@@ -455,7 +454,7 @@ def print_packages_to_json(packages: List[PackageInfo], filename: str) -> None:
 
 
 def main():
-    print(f"{PROGRAM_NAME} - (c) Jesper Hogstrom 2021.")
+    print(f"{PROGRAM_NAME} {VERSION} - (c) {AUTHOR} 2021.")
     print(f"Executed {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}.\n")
     parser = init_argparse()
     args = parser.parse_args()

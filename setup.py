@@ -3,17 +3,21 @@
 
 from setuptools import setup, find_packages  # Always prefer setuptools over distutils
 from os import path
-
+import sys
 here = path.abspath(path.dirname(__file__))
+
+sys.path.append(here)
+import pkglic.authinfo as pkglic
+
 
 # Get the long description from the relevant file
 with open(path.join(here, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
 setup(
-    name='pkglic',
-    version='1.0.3',
-    author='Jesper Högström',
+    name=pkglic.PROGRAM_NAME,
+    version=pkglic.VERSION,
+    author=pkglic.AUTHOR,
     author_email='jspr.hgstrm@gmail.com',
     license='MIT',
     keywords="license, package, javascript, python, csharp",
