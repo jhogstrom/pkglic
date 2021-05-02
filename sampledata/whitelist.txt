@@ -1,0 +1,4 @@
+# Nose is MIT
+nose: * -> MIT
+funcsigs
+sigtools: MIT -> foobar

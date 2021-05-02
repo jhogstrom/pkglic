@@ -14,7 +14,7 @@ import concurrent.futures
 from lxml import etree
 from collections import defaultdict
 from pprint import pprint
-from authinfo import *
+import authinfo
 
 SORTORDER = {
     0: lambda x: [x.type(), x.name],
@@ -22,6 +22,9 @@ SORTORDER = {
     2: lambda x: [x.type(), x.license],
     3: "g"
 }
+
+logger = logging.getLogger(authinfo.PROGRAM_NAME)
+logger.setLevel(logging.DEBUG)
 
 
 class PackageInfo:
@@ -35,10 +38,19 @@ class PackageInfo:
         self.author_email = None
         self.home_page = None
         self.summary = None
+        self.whitelisted = False
+        self.remapped = False
 
     def __str__(self):
         name = f"{self.name} v{self.version}"
-        return f"[{self.type()}] {name:30} {self.license} {self.licenseurl}".strip()
+        props = []
+        if self.licenseurl:
+            props.append(self.licenseurl)
+        if self.remapped:
+            props.append(f"(remapped from '{self.orglicense}')")
+        if self.whitelisted:
+            props.append("(whitelisted)")
+        return f"[{self.type()}] {name:30} {self.license} {' '.join(props)}".strip()
 
     def asjson(self):
         return {
@@ -74,7 +86,6 @@ class NpmPackageInfo(PackageInfo):
             self.author_email = author.get("email")
         self.home_page = d.get("home_page")
         self.summary = d.get("description")
-
 
     @classmethod
     def can_parse(self, filename: str) -> bool:
@@ -280,7 +291,7 @@ def update_package_info(package_info: PackageInfo, verbose: bool) -> None:
         print(f"Downloading {package_info.name} from {package_info.filename}.")
     r = requests.get(package_info.url)
     if r.status_code == 404:
-        logging.warning(f"{package_info.name} - not found at {package_info.url}")
+        logger.warning(f"{package_info.name} - not found at {package_info.url}")
         package_info.license = "404_NOT_FOUND"
         return
 
@@ -376,7 +387,7 @@ def detect_unwanted_licenses(packages: List[PackageInfo], unwanted_licenses: Lis
     Returns:
         bool: Returns true if there are unwanted licenses present
     """
-    unwanted = [p for p in packages if p.license in unwanted_licenses]
+    unwanted = [p for p in packages if p.license in unwanted_licenses and not p.whitelisted]
     if unwanted:
         print("\nUnwanted license(s) detected!")
         for p in sorted(unwanted, key=SORTORDER[0]):
@@ -389,7 +400,7 @@ def init_argparse() -> argparse.ArgumentParser:
     """
     Initiate argument parser.
     """
-    parser = argparse.ArgumentParser(prog=PROGRAM_NAME, fromfile_prefix_chars='@')
+    parser = argparse.ArgumentParser(prog=authinfo.PROGRAM_NAME, fromfile_prefix_chars='@')
     parser.add_argument(
         '-f', "--files",
         metavar='file',
@@ -425,7 +436,12 @@ def init_argparse() -> argparse.ArgumentParser:
         type=str,
         default=None,
         help="Output as json-string to <file>.")
-
+    parser.add_argument(
+        "-w", "--whitelist",
+        metavar="file",
+        type=str,
+        default=None,
+        help="Read whitelisted packages form <file>.")
 
     # Automatically add the parameter file args.txt if it exists.
     if os.path.exists("args.txt") and "@args.txt" not in sys.argv:
@@ -442,8 +458,10 @@ def print_packages_to_json(packages: List[PackageInfo], filename: str) -> None:
         packages (List[PackageInfo]): List of PackageInfo
         filename (str): File to write to.
     """
+    if filename is None:
+        return
     res = {
-        "generator": f"{PROGRAM_NAME} {VERSION} (c) {AUTHOR} 2021",
+        "generator": f"{authinfo.PROGRAM_NAME} {authinfo.VERSION} (c) {authinfo.AUTHOR} 2021",
         "generated": datetime.datetime.now().strftime('%Y-%m-%d %H:%M'),
         "packages": [p.asjson() for p in packages]
     }
@@ -453,19 +471,78 @@ def print_packages_to_json(packages: List[PackageInfo], filename: str) -> None:
     print(f"\nJson-data written to '{filename}'.")
 
 
+def get_whitelisted(filename: str) -> dict:
+    if filename is None:
+        logger.debug("No whitelist-file.")
+        return None
+
+    with open(filename) as f:
+        try:
+            return json.load(f)
+        except json.decoder.JSONDecodeError:
+            res = {}
+            logger.debug(f"{filename} not in json format. Attempting line-by-line.")
+            f.seek(0)
+            for line in f.readlines():
+                if line.strip().startswith("#"):
+                    continue
+                parts = line.split(":")
+                print(parts)
+                if len(parts) == 1:
+                    parts.append("*")
+                licmap = parts[1].split("->")
+                if len(licmap) == 1:
+                    licmap.append("")
+                res[parts[0].strip()] = {"expect": licmap[0].strip(), "mapto": licmap[1].strip()}
+            return res
+        except Exception as e:
+            logger.exception(e)
+            return None
+
+
+def apply_whitelisting(packages: List[PackageInfo], whitelisting: dict) -> List[PackageInfo]:
+    if whitelisting is None:
+        return packages
+    res = []
+    for p in packages:
+        if p.name not in whitelisting:
+            res.append(p)
+            continue
+        whitelist = whitelisting[p.name]
+        if whitelist.get("expect", "*") == "*" and whitelist.get("mapto", "") == "":
+            p.whitelisted = True
+        elif whitelist.get("expect", "*") == "*":
+            p.whitelisted = True
+            p.orglicense = p.license
+            p.license = whitelist.get("mapto", "")
+            p.remapped = True
+        elif p.license == whitelist.get("expect", "*") and whitelist.get("mapto", "") == "":
+            p.whitelisted = True
+        elif p.license == whitelist.get("expect", "*"):
+            p.whitelisted = True
+            p.orglicense = p.license
+            p.license = whitelist.get("mapto", "")
+            p.remapped = True
+        res.append(p)
+    return res
+
+
 def main():
-    print(f"{PROGRAM_NAME} {VERSION} - (c) {AUTHOR} 2021.")
+    print(f"{authinfo.PROGRAM_NAME} {authinfo.VERSION} - (c) {authinfo.AUTHOR} 2021.")
     print(f"Executed {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}.\n")
     parser = init_argparse()
     args = parser.parse_args()
 
+    whitelisting = get_whitelisted(args.whitelist)
+    pprint(whitelisting)
+
     packages = acquire_package_info(args.files, args.type, args.verbose)
+    packages = apply_whitelisting(packages, whitelisting)
     print_package_info(packages, SORTORDER[args.order])
-    if args.json is not None:
-        print_packages_to_json(packages, args.json)
     if detect_unwanted_licenses(packages, args.unwanted):
         print("Exiting with error level!")
         exit(1)
+    print_packages_to_json(packages, args.json)
 
 
 if __name__ == '__main__':

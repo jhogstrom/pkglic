@@ -1,0 +1,13 @@
+{
+    "nose":
+    {
+        "expect": "*",
+        "mapto": "MIT"
+    },
+    "funcsigs": {},
+    "sigtools":
+    {
+        "expect": "MIT",
+        "mapto": "foobar"
+    }
+}

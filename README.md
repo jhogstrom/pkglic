@@ -28,11 +28,14 @@ optional arguments:
   -o {0,1,2,3}, --order {0,1,2,3}
                         Which fields to use to sort output; 0 - type, name, 1:
                         license, name, 2: type, license, 3: group by license.
-  -t {py,js,cs,nu}, --type {py,js,cs,nu}
+  -t {cs,py,js,cs}, --type {cs,py,js,cs}
                         Assume <type> for all <files> if not guessable.
   -u [UNWANTED [UNWANTED ...]], --unwanted [UNWANTED [UNWANTED ...]]
                         Exit with errorlevel on these license types.
   -v, --verbose         Increase verbosity.
+  --json file           Output as json-string to <file>.
+  -w file, --whitelist file
+                        Read whitelisted packages form <file>.
   ```
 
 Installation
@@ -69,10 +72,40 @@ Any file containing "packages.config" will be analyzed as a nuget packages file 
 
 https://nuget.org is used to fetch the meta data.
 
+Whitelisting
+============
+In some cases you'll find a package that lists as NOT_SPECIFIED or 404_NOT_FOUND, but you know from some other source the license it is actually used as. In that case you can add a `--whitelist` file. The whitelist file can be written as a text file or as a json formatted structure.
+
+The textfile has the following format:
+```
+<package_name>[: <expected_license>[ -> <map_to_license>]]
+```
+
+Valid examples are
+```
+foo
+foobar: NOT_SPECIFIED
+barbaz: 404_NOT_FOUND -> MIT
+```
+
+The above file will
+* whitelist `foo` no matter what license it presents.
+* whitelist `foobar` if it presents as NOT_SPECIFIED.
+* whitelist `barbaz` if it presents as 404_NOT_FOUND and remap it to MIT.
+
+The remapping is used when listing the output as well as in the `--json` output.
+
+If written as json, the following is eqiuvalent:
+```
+{
+    "foo": {},
+    "foobar": {"expected": "NOT_SPECIFIED"},
+    "barbaz": {"expected": ""404_NOT_FOUND", "mapto": "MIT"}
+}
+```
 
 Hard check on licenses
 ======================
-
 Some projects prefer to avoid certain OSS licenses. This was actually the main reason for writing the tool. There are many ways to accomplish such a verification, including using the switch `-u` or `--unwanted` - for instance `-u GPL` or `-unwanted "MIT License"`.
 
 Adding the `-u` switch will first print all packages and their licenses, then print out all packages that match any unwanted license and finally *terminate with an error code, breaking the build*.
@@ -80,7 +113,6 @@ Adding the `-u` switch will first print all packages and their licenses, then pr
 
 Updating wiki pages
 ===================
-
 All output is written to `stdout`, so something like
 ```
 pkglic -f requirements.txt | tee /tmp/licenses_in_use
@@ -90,7 +122,6 @@ will do the trick (assuming you have a tool called wikiupdater etc etc).
 
 Scanning all files in a tree
 ============================
-
 If you have scattered your requirements.txt throughout your source tree, and even separated the development packages into dev-requirements.txt, you can use the existing tools to `find` all files and then add them to the command lline using `xargs`.
 
 ```
