@@ -38,7 +38,14 @@ optional arguments:
                         Read whitelisted packages form <file>.
   -x file, --exclude file
                         Do not check (or list) excluded packages.
+  --credits file        Generate a credits file.
+  --creditstemplate file
+                        Template used to generate credits file.
   ```
+
+Parameters
+----------
+Add parameters using a parameter file by prefixing it with @. If there is a file named `args.txt` in the current directory it will automatically be added. Place one parameter per line.
 
 Installation
 ============
@@ -184,6 +191,10 @@ The output file has the following format:
     ]
 }
 ```
+
+It is also possible to generate an output file straight from pkglic, by means of `--credits` and `--creditstemplate`. The credits template will be expanded by jinja2, with a list of packages as described above passed in named `packages`.
+
+There is a simple template included as default if you omit the `--creditstemplate` argument.
 
 License types
 =============

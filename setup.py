@@ -5,7 +5,6 @@ from setuptools import setup, find_packages  # Always prefer setuptools over dis
 from os import path
 import sys
 here = path.abspath(path.dirname(__file__))
-
 sys.path.append(here)
 import pkglic.authinfo as pkglic
 
@@ -42,6 +41,8 @@ setup(
         "Topic :: Software Development :: Build Tools"
         ],
     packages=find_packages(),
+    package_data={'': ['pkglic/creditstemplate.txt']},
+    include_package_data=True,
     entry_points={
         'console_scripts': [
             'pkglic = pkglic.pkglic:main'

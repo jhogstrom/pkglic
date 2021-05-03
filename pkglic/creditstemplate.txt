@@ -1,0 +1,32 @@
+<html>
+<head>
+<meta charset="UTF-8">
+</head>
+<body>
+<h1>Credits</h1>
+The following packages were used in the construction of this application.
+<ul>
+{% for p in packages %}
+<li>
+{%- if p.home_page -%}
+<a href="{{ p.home_page }}">{{ p.name }}</a>&nbsp;{{p.version}}
+{%- else -%}
+{{ p.name }} {{p.version}}
+{%- endif -%}
+&nbsp;
+{%- if p.author -%}
+by&nbsp;
+{%- if p.author_email -%}
+<a href="mailto:{{ p.author_email }}">{{p.author}}</a>
+{%- else -%}
+{{p.author}}
+{%- endif -%}
+{%- endif -%}
+. Issued under {{ p.license }} license. {{ p.summary }}
+{%- endfor %}
+
+</ul>
+
+Credits page created by {{ program }} (c) {{ author }}.
+</body>
+</html>

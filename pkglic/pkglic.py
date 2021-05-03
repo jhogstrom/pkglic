@@ -13,8 +13,12 @@ from typing import List, Type
 import concurrent.futures
 from lxml import etree
 from collections import defaultdict
-from pprint import pprint
-import authinfo
+from jinja2 import Template
+# from pprint import pprint
+try:
+    from .authinfo import PROGRAM_NAME, AUTHOR, VERSION
+except ImportError:
+    from authinfo import PROGRAM_NAME, AUTHOR, VERSION
 
 SORTORDER = {
     0: lambda x: [x.type(), x.name],
@@ -23,7 +27,7 @@ SORTORDER = {
     3: "g"
 }
 
-logger = logging.getLogger(authinfo.PROGRAM_NAME)
+logger = logging.getLogger(PROGRAM_NAME)
 logger.setLevel(logging.DEBUG)
 
 
@@ -407,7 +411,7 @@ def init_argparse() -> argparse.ArgumentParser:
     """
     Initiate argument parser.
     """
-    parser = argparse.ArgumentParser(prog=authinfo.PROGRAM_NAME, fromfile_prefix_chars='@')
+    parser = argparse.ArgumentParser(prog=PROGRAM_NAME, fromfile_prefix_chars='@')
     parser.add_argument(
         '-f', "--files",
         metavar='file',
@@ -455,6 +459,18 @@ def init_argparse() -> argparse.ArgumentParser:
         type=str,
         default=None,
         help="Do not check (or list) excluded packages.")
+    parser.add_argument(
+        "--credits",
+        metavar="file",
+        type=str,
+        default=None,
+        help="Generate a credits file.")
+    parser.add_argument(
+        "--creditstemplate",
+        metavar="file",
+        type=str,
+        default=None,
+        help="Template used to generate credits file.")
 
     # Automatically add the parameter file args.txt if it exists.
     if os.path.exists("args.txt") and "@args.txt" not in sys.argv:
@@ -474,7 +490,7 @@ def print_packages_to_json(packages: List[PackageInfo], filename: str) -> None:
     if filename is None:
         return
     res = {
-        "generator": f"{authinfo.PROGRAM_NAME} {authinfo.VERSION} (c) {authinfo.AUTHOR} 2021",
+        "generator": f"{PROGRAM_NAME} {VERSION} (c) {AUTHOR} 2021",
         "generated": datetime.datetime.now().strftime('%Y-%m-%d %H:%M'),
         "packages": [p.asjson() for p in packages]
     }
@@ -576,16 +592,58 @@ def get_excluded(filename: str) -> List[str]:
         return [l.strip() for l in f.readlines() if not l.strip().startswith("#")]
 
 
+def verify_file(filename: str, *, required: bool = True, argname: str = "") -> None:
+    if filename is None:
+        if required:
+            print(f"Missing parameter '{argname}'. Cannot continue.")
+            exit(1)
+        return
+
+    if not os.path.exists(filename):
+        print(f"The file '{filename}' could not be found. Terminating.")
+        exit(1)
+
+
+def create_credits_file(packages: List[PackageInfo], sortkey, outfile: str, templatefile: str) -> None:
+    with open(templatefile) as f:
+        template = Template(f.read())
+
+    data = {
+        "packages": sorted(packages, key=sortkey),
+        "program": PROGRAM_NAME,
+        "author": AUTHOR}
+
+    with open(outfile, "w") as f:
+        f.write(template.render(data))
+
+    print(f"Credits written to '{outfile}'.")
+
+
+def validate_args(args) -> None:
+    for f in args.files:
+        verify_file(f)
+    verify_file(args.whitelist, required=False)
+    verify_file(args.exclude, required=False)
+    if args.credits is not None:
+        if args.creditstemplate is None:
+            here = os.path.abspath(os.path.dirname(__file__))
+            args.creditstemplate = os.path.join(here, "creditstemplate.txt")
+        verify_file(args.creditstemplate, argname="creditstemplate")
+    if args.creditstemplate is not None and args.credits is None:
+        print(f"Need --credits <file> if --creditstemplate is specified ('{args.creditstemplate}').")
+        exit(1)
+
+
 def main():
-    print(f"{authinfo.PROGRAM_NAME} {authinfo.VERSION} - (c) {authinfo.AUTHOR} 2021.")
+    print(f"{PROGRAM_NAME} {VERSION} - (c) {AUTHOR} 2021.")
     print(f"Executed {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}.\n")
     parser = init_argparse()
     args = parser.parse_args()
 
-    exclude_packages = get_excluded(args.exclude)
+    validate_args(args)
 
+    exclude_packages = get_excluded(args.exclude)
     whitelisting = get_whitelisted(args.whitelist)
-    pprint(whitelisting)
 
     packages = acquire_package_info(args.files, args.type, args.verbose, exclude_packages)
     packages = apply_whitelisting(packages, whitelisting)
@@ -594,6 +652,12 @@ def main():
         print("Exiting with error level!")
         exit(1)
     print_packages_to_json(packages, args.json)
+    if args.credits is not None:
+        create_credits_file(
+            packages,
+            SORTORDER[args.order if args.order in [0, 1, 2] else 0],
+            args.credits,
+            args.creditstemplate)
 
 
 if __name__ == '__main__':
