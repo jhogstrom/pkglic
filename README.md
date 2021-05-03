@@ -121,11 +121,15 @@ Some packages you may want to exclude. Maybe because they are your own. Maybe be
 
 The file format is simple. One package per line. Lines starting with "#" are considered comments. You cannot add comments after the package name.
 
+Note that you can add a bunch of packages straight on the command line using the same switch: `--exclude pack1,pack2,pack3` (or `--exclude "pack1, pack2, pack3"` if you want spaces after comma). Note that a single package will be treated as a file!
+
 Hard check on licenses
 ======================
 Some projects prefer to avoid certain OSS licenses. This was actually the main reason for writing the tool. There are many ways to accomplish such a verification, including using the switch `-u` or `--unwanted` - for instance `-u GPL` or `-unwanted "MIT License"`.
 
 Adding the `-u` switch will first print all packages and their licenses, then print out all packages that match any unwanted license and finally *terminate with an error code, breaking the build*.
+
+License types are checked case-insensitive.
 
 
 Updating wiki pages

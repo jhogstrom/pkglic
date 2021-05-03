@@ -411,7 +411,8 @@ def detect_unwanted_licenses(packages: List[PackageInfo], unwanted_licenses: Lis
     Returns:
         bool: Returns true if there are unwanted licenses present
     """
-    unwanted = [p for p in packages if p.license in unwanted_licenses and not p.whitelisted]
+    unwanted_upper = [_.upper() for _ in unwanted_licenses]
+    unwanted = [p for p in packages if p.license in unwanted_upper and not p.whitelisted]
     if unwanted:
         print("\nUnwanted license(s) detected!")
         for p in sorted(unwanted, key=SORTORDER[0]):
@@ -601,11 +602,23 @@ def get_excluded(filename: str) -> List[str]:
     if filename is None:
         return []
 
+    if "," in filename:
+        return [p.strip() for p in filename.split(",")]
+
     with open(filename) as f:
         return [l.strip() for l in f.readlines() if not l.strip().startswith("#")]
 
 
 def verify_file(filename: str, *, required: bool = True, argname: str = "") -> None:
+    """
+    Verify the filename is set and if required also existing. If validation fails the
+    application with terminate with an error code.
+
+    Args:
+        filename (str): Name of file
+        required (bool, optional): Indicates if the filename must be set. Defaults to True.
+        argname (str, optional): Name of parameter - used in error message. Defaults to "".
+    """
     if filename is None:
         if required:
             print(f"Missing parameter '{argname}'. Cannot continue.")
@@ -618,6 +631,16 @@ def verify_file(filename: str, *, required: bool = True, argname: str = "") -> N
 
 
 def create_credits_file(packages: List[PackageInfo], sortkey, outfile: str, templatefile: str) -> None:
+    """
+    Create a summary file based on `templatefile` and write it to `outfile`.
+    Data will be sorted according to sortkey.
+
+    Args:
+        packages (List[PackageInfo]): List of packages.
+        sortkey ([type]): Lambda to sort the packages.
+        outfile (str): File into which to write the output.
+        templatefile (str): Template used for expansion.
+    """
     with open(templatefile) as f:
         template = Template(f.read())
 
@@ -633,10 +656,17 @@ def create_credits_file(packages: List[PackageInfo], sortkey, outfile: str, temp
 
 
 def validate_args(args) -> None:
+    """
+    Validates command lline arguments.
+
+    Args:
+        args: The command line arguments namespace.
+    """
     for f in args.files:
         verify_file(f)
     verify_file(args.whitelist, required=False)
-    verify_file(args.exclude, required=False)
+    if args.exclude is not None and "," not in args.exclude:
+        verify_file(args.exclude, required=False)
     if args.credits is not None:
         if args.creditstemplate is None:
             here = os.path.abspath(os.path.dirname(__file__))
@@ -648,6 +678,9 @@ def validate_args(args) -> None:
 
 
 def main():
+    """
+    Main function of the script.
+    """
     print(f"{PROGRAM_NAME} {VERSION} - (c) {AUTHOR} 2021.")
     print(f"Executed {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}.\n")
     parser = init_argparse()
