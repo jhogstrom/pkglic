@@ -46,7 +46,9 @@ class PackageInfo:
         self.remapped = False
 
     def __str__(self):
-        name = f"{self.name} v{self.version}"
+        name = self.name
+        if self.version is not None:
+            name += f" {self.version}"
         props = []
         if self.licenseurl:
             props.append(self.licenseurl)
@@ -55,6 +57,17 @@ class PackageInfo:
         if self.whitelisted:
             props.append("(whitelisted)")
         return f"[{self.type()}] {name:30} {self.license} {' '.join(props)}".strip()
+
+    def clean_license(self, license: str) -> str:
+        MAXLEN = 50
+        license = license.replace('"', '')
+        if license == "":
+            return "NOT_SPECIFIED"
+        if license.startswith("GNU LESSER GENERAL PUBLIC LICENSE"):
+            return "LGPL"
+        if len(license) > MAXLEN:
+            return license[:MAXLEN] + "..."
+        return license
 
     def asjson(self):
         return {
@@ -82,7 +95,7 @@ class NpmPackageInfo(PackageInfo):
     def update_metadata(self, s: str) -> None:
         d = json.loads(s)
 
-        self.license = d.get("license", "NOT_SPECIFIED")
+        self.license = self.clean_license(d.get("license", "NOT_SPECIFIED"))
 
         author = d.get("author")
         if author is not None:
@@ -128,7 +141,7 @@ class PythonPackageInfo(PackageInfo):
 
     def update_metadata(self, s: str) -> None:
         d = json.loads(s)
-        self.license = d.get("info", {}).get("license", "NOT_SPECIFIED")
+        self.license = self.clean_license(d.get("info", {}).get("license", "NOT_SPECIFIED"))
         self.version = d.get("info", {}).get("version", "??")
         self.author = d.get("info", {}).get("author")
         self.author_email = d.get("info", {}).get("author_email")
@@ -237,7 +250,7 @@ class CSharpPackageInfo(PackageInfo):
             lictype = license[0].xpath("./@type")[0]
             licvalue = license[0].xpath("./text()")[0]
             if lictype == "expression":
-                self.license = licvalue
+                self.license = self.clean_license(licvalue)
             else:
                 self.license = f"{lictype}: {licvalue}"
         else:
