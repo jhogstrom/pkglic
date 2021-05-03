@@ -14,6 +14,9 @@ import pkglic.authinfo as pkglic
 with open(path.join(here, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
+with open(path.join(here, "requirements.txt")) as f:
+    deps = [l.strip() for l in f.readlines() if l.strip() != ""]
+
 setup(
     name=pkglic.PROGRAM_NAME,
     version=pkglic.VERSION,
@@ -47,9 +50,6 @@ setup(
     description='Script to get the licenses of components used by js, py or c# apps.',
     long_description_content_type="text/markdown",
     long_description=long_description,
-    install_requires=[
-        'requests',
-        'lxml'
-        ],
+    install_requires=deps,
     zip_safe=True,
     )
