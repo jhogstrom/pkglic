@@ -16,32 +16,33 @@ Basic operation is to invoke the script with some file
 and get an output with package names and their license. There are some more switches supported.
 
 ```
-pkglic - (c) Jesper Hogstrom 2021.
-
-usage: pkglic [-h] -f file [file ...] [-o {0,1,2,3}] [-t {py,js,cs,nu}]
-              [-u [UNWANTED [UNWANTED ...]]] [-v]
+usage: pkglic [-h] -f file [-t {cs,py,js,cs}] [--uniq] [-x file|package]
+              [-u package] [-w file|package] [-o {0,1,2,3}] [--json file]
+              [--credits file] [--creditstemplate file] [-v]
 
 optional arguments:
   -h, --help            show this help message and exit
-  -f file [file ...], --files file [file ...]
+  -f file, --files file
                         input files to scan.
+  -t {cs,py,js,cs}, --type {cs,py,js,cs}
+                        Assume <type> for all --files if not guessable by
+                        filename.
+  --uniq                Remove duplicate packages.
+  -x file|package, --exclude file|package
+                        Do not check (or list) excluded packages.
+  -u package, --unwanted package
+                        Exit with errorlevel on these license types.
+  -w file|package, --whitelist file|package
+                        Read whitelisted packages form <file>.
   -o {0,1,2,3}, --order {0,1,2,3}
                         Which fields to use to sort output; 0 - type, name, 1:
                         license, name, 2: type, license, 3: group by license.
-  -t {cs,py,js,cs}, --type {cs,py,js,cs}
-                        Assume <type> for all <files> if not guessable.
-  -u [UNWANTED [UNWANTED ...]], --unwanted [UNWANTED [UNWANTED ...]]
-                        Exit with errorlevel on these license types.
-  -v, --verbose         Increase verbosity.
   --json file           Output as json-string to <file>.
-  -w file, --whitelist file
-                        Read whitelisted packages form <file>.
-  -x file, --exclude file
-                        Do not check (or list) excluded packages.
   --credits file        Generate a credits file.
   --creditstemplate file
                         Template used to generate credits file.
-  ```
+  -v, --verbose         Increase verbosity.
+```
 
 Parameters
 ----------
@@ -55,7 +56,11 @@ Either install it from pypi
 pip install pkglic
 ```
 
-or download the sources and make sure your environment has the required packages installed (`pip install -r requirements.txt`) and invoke the script from wherever you store it. You may for instance want to check it in with the rest of your build tools.
+or download the sources
+```
+git clone https://github.com/jhogstrom/pkglic.git
+```
+and make sure your environment has the required packages installed (`pip install -r requirements.txt`) and invoke the script from wherever you store it. You may for instance want to check it in with the rest of your build tools.
 
 Supported formats
 =================
@@ -115,17 +120,19 @@ If written as json, the following is eqiuvalent:
 }
 ```
 
+It is possible to add several `--whitelist` arguments. If they reference a file, the file will be read. If they do not, the argument will be treated as a line in the textfile as described above.
+
 Exclude packages
 ================
 Some packages you may want to exclude. Maybe because they are your own. Maybe because some other reason. Fear not. Simply list them in a text file and add `--exclude <file>` as an argument. The packages listed in the file (case sensitive) will be excluded from any output - their meta data will not even be fetched!
 
 The file format is simple. One package per line. Lines starting with "#" are considered comments. You cannot add comments after the package name.
 
-Note that you can add a bunch of packages straight on the command line using the same switch: `--exclude pack1,pack2,pack3` (or `--exclude "pack1, pack2, pack3"` if you want spaces after comma). Note that a single package will be treated as a file!
+Note that you can add a bunch of packages straight on the command line using the same switch: `-x pack1 -x pack2 -x pack3`. It is even possible to merge it into one argument `--exclude pack1,pack2,pack3` (or even `--exclude "pack1, pack2, pack3"`). Anything that matches a filename will be treated as a file and read. Other values will be trated as package names. Note that if you merge items together
 
 Hard check on licenses
 ======================
-Some projects prefer to avoid certain OSS licenses. This was actually the main reason for writing the tool. There are many ways to accomplish such a verification, including using the switch `-u` or `--unwanted` - for instance `-u GPL` or `-unwanted "MIT License"`.
+Some projects prefer to avoid certain OSS licenses. This was actually the main reason for writing the tool. There are many ways to accomplish such a verification, including using the switch `-u` or `--unwanted` - for instance `-u GPL` or `-unwanted "MIT License"`. You can add as manu `-u`/`--unwanted` arguments as you wish.
 
 Adding the `-u` switch will first print all packages and their licenses, then print out all packages that match any unwanted license and finally *terminate with an error code, breaking the build*.
 
@@ -141,8 +148,8 @@ wikiupdater --host wiki.intranet --target-page licenses --upload /tmp/licenses_i
 ```
 will do the trick (assuming you have a tool called wikiupdater etc etc).
 
-Scanning all files in a tree
-============================
+Scanning multiple files
+=======================
 If you have scattered your requirements.txt throughout your source tree, and even separated the development packages into dev-requirements.txt, you can use the existing tools to `find` all files and then add them to the command lline using `xargs`.
 
 ```
@@ -154,11 +161,12 @@ This can of course be combined with tee.
 find -iname '*requirements.txt' | xargs python pkglic -f | tee /tmp/licenses_in_use
 ```
 
-Note that adding multiple files may result in duplication of packages, if they appear in multiple files. This may add some value, as you will see in how many places (but not which places) you require each package. If that is more information than you need, then remove the duplicate lines with `uniq`.
+If you know your file locations in advance, you can specify them directly.
+```
+pkglic -f module1/requirements.txt -f module2/requirements.txt -f frontend/package.json
+```
 
-```
-find -iname '*requirements.txt' | xargs pkglic -f | uniq
-```
+Note that adding multiple files may result in duplication of packages, if they appear in multiple files. This may add some value, as you will see in how many places (but not which places) you require each package. If that is more information than you need, then remove the duplicate packages with `--uniq`. Duplicates are eliminated prior to fetching meta data, thus saving some execution time. Worth noting is that the dupes will not be part of any output!
 
 Modifying the output
 ====================
@@ -196,7 +204,7 @@ The output file has the following format:
 }
 ```
 
-It is also possible to generate an output file straight from pkglic, by means of `--credits` and `--creditstemplate`. The credits template will be expanded by jinja2, with a list of packages as described above passed in named `packages`.
+It is also possible to generate an output file straight from pkglic, by means of `--credits` and `--creditstemplate`. The credits template will be expanded by [jinja2](https://palletsprojects.com/p/jinja/), with a list of packages as described above passed in named `packages`.
 
 There is a simple template included as default if you omit the `--creditstemplate` argument.
 

@@ -355,7 +355,8 @@ def acquire_package_info(
         filenames: List[str],
         default_type: str,
         verbose: bool,
-        exclude_packages: List[str]) -> List[PackageInfo]:
+        exclude_packages: List[str],
+        make_unique: bool) -> List[PackageInfo]:
     """
     Download the metadata for all packages.
 
@@ -373,6 +374,14 @@ def acquire_package_info(
         packages += parser.parse(filename)
 
     packages = [p for p in packages if p.name not in exclude_packages]
+
+    if make_unique:
+        unique = []
+        for p in packages:
+            if all([_.name != p.name for _ in unique]):
+                unique.append(p)
+        print(f"Eliminated {len(packages) - len(unique)} duplicates based on name.")
+        packages = unique
 
     fetch_package_infos(packages, verbose)
     return packages
@@ -398,6 +407,8 @@ def print_package_info(packages: List[PackageInfo], sortkey) -> None:
     else:
         for package in sorted(packages, key=sortkey):
             print(package)
+
+    print(f"\n{len(packages)} packages checked.")
 
 
 def detect_unwanted_licenses(packages: List[PackageInfo], unwanted_licenses: List[str]) -> bool:
@@ -429,10 +440,36 @@ def init_argparse() -> argparse.ArgumentParser:
     parser.add_argument(
         '-f', "--files",
         metavar='file',
-        type=str,
-        nargs='+',
+        action='append',
         required=True,
         help='input files to scan.')
+    parser.add_argument(
+        "-t", "--type",
+        choices=[p.type() for p in PARSERS],
+        default=None,
+        help="Assume <type> for all --files if not guessable by filename.")
+    parser.add_argument(
+        "--uniq",
+        action="store_true",
+        help="Remove duplicate packages.")
+    parser.add_argument(
+        "-x", "--exclude",
+        metavar="file|package",
+        action='append',
+        default=[],
+        help="Do not check (or list) excluded packages.")
+    parser.add_argument(
+        "-u", "--unwanted",
+        metavar="package",
+        action='append',
+        default=[],
+        help="Exit with errorlevel on these license types.")
+    parser.add_argument(
+        "-w", "--whitelist",
+        metavar="file|package",
+        action='append',
+        default=[],
+        help="Read whitelisted packages form <file>.")
     parser.add_argument(
         "-o", "--order",
         type=int,
@@ -440,51 +477,25 @@ def init_argparse() -> argparse.ArgumentParser:
         default=list(SORTORDER.keys())[0],
         help="Which fields to use to sort output; 0 - type, name, 1: license, name, 2: type, license, 3: group by license.")  # noqae501
     parser.add_argument(
-        "-t", "--type",
-        type=str,
-        choices=[p.type() for p in PARSERS],
-        default=None,
-        help="Assume <type> for all <files> if not guessable.")
-    parser.add_argument(
-        "-u", "--unwanted",
-        type=str,
-        nargs='*',
-        default=[],
-        help="Exit with errorlevel on these license types.")
-    parser.add_argument(
-        "-v", "--verbose",
-        action="store_true",
-        help="Increase verbosity.")
-    parser.add_argument(
         "--json",
         metavar="file",
-        type=str,
         default=None,
         help="Output as json-string to <file>.")
     parser.add_argument(
-        "-w", "--whitelist",
-        metavar="file",
-        type=str,
-        default=None,
-        help="Read whitelisted packages form <file>.")
-    parser.add_argument(
-        "-x", "--exclude",
-        metavar="file",
-        type=str,
-        default=None,
-        help="Do not check (or list) excluded packages.")
-    parser.add_argument(
         "--credits",
         metavar="file",
-        type=str,
         default=None,
         help="Generate a credits file.")
     parser.add_argument(
         "--creditstemplate",
         metavar="file",
-        type=str,
         default=None,
         help="Template used to generate credits file.")
+    parser.add_argument(
+        "-v", "--verbose",
+        action="store_true",
+        help="Increase verbosity.")
+
 
     # Automatically add the parameter file args.txt if it exists.
     if os.path.exists("args.txt") and "@args.txt" not in sys.argv:
@@ -514,42 +525,57 @@ def print_packages_to_json(packages: List[PackageInfo], filename: str) -> None:
     print(f"\nJson-data written to '{filename}'.")
 
 
-def get_whitelisted(filename: str) -> dict:
+def get_whitelisted(whitelisted: List[str]) -> dict:
     """
-    Read the whitelist file and return as a dictionary.
+    Examine the content of whitelisted and return a json structure with whitelisting.
 
     Args:
-        filename (str): Name of file to read.
+        whitelisted (List[str]): List of strings with either files or packages.
 
     Returns:
         dict: Dictionary with whitelist info.
     """
-    if filename is None:
-        logger.debug("No whitelist-file.")
-        return None
+    def update_res(package: str) -> str:
+        if package.strip().startswith("#"):
+            return
+        parts = package.split(":")
+        if len(parts) == 1:
+            parts.append("*")
+        licmap = parts[1].split("->")
+        if len(licmap) == 1:
+            licmap.append("")
+        res[parts[0].strip()] = {"expect": licmap[0].strip(), "mapto": licmap[1].strip()}
 
-    with open(filename) as f:
-        try:
-            return json.load(f)
-        except json.decoder.JSONDecodeError:
-            res = {}
-            logger.debug(f"{filename} not in json format. Attempting line-by-line.")
-            f.seek(0)
-            for line in f.readlines():
-                if line.strip().startswith("#"):
-                    continue
-                parts = line.split(":")
-                print(parts)
-                if len(parts) == 1:
-                    parts.append("*")
-                licmap = parts[1].split("->")
-                if len(licmap) == 1:
-                    licmap.append("")
-                res[parts[0].strip()] = {"expect": licmap[0].strip(), "mapto": licmap[1].strip()}
-            return res
-        except Exception as e:
-            logger.exception(e)
-            return None
+    if not whitelisted:
+        logger.debug("No whitelisted packages.")
+        return None
+    res = {}
+    for w in whitelisted:
+        if not os.path.exists(w):
+            update_res(w)
+        else:
+            with open(w) as f:
+                try:
+                    res = res + json.load(f)
+                except json.decoder.JSONDecodeError:
+                    res = {}
+                    logger.debug(f"{w} not in json format. Attempting line-by-line.")
+                    f.seek(0)
+                    for line in f.readlines():
+                        if line.strip().startswith("#"):
+                            continue
+                        parts = line.split(":")
+                        if len(parts) == 1:
+                            parts.append("*")
+                        licmap = parts[1].split("->")
+                        if len(licmap) == 1:
+                            licmap.append("")
+                        res[parts[0].strip()] = {"expect": licmap[0].strip(), "mapto": licmap[1].strip()}
+                    return res
+                except Exception as e:
+                    logger.exception(e)
+
+    return res
 
 
 def apply_whitelisting(packages: List[PackageInfo], whitelisting: dict) -> List[PackageInfo]:
@@ -589,24 +615,29 @@ def apply_whitelisting(packages: List[PackageInfo], whitelisting: dict) -> List[
     return res
 
 
-def get_excluded(filename: str) -> List[str]:
+def get_excluded(exclude_list: List[str]) -> List[str]:
     """
-    Retrieve excluded packages from `filename`.
+    Retrieve excluded packages from `exclude_list`.
 
     Args:
-        filename (str): Textfile listing excluded packages.
+        exclude_list (List[str]): Filenames containing packages to exclude or individual packages.
 
     Returns:
         List[str]: List of packages not to check.
     """
-    if filename is None:
-        return []
+    res = []
 
-    if "," in filename:
-        return [p.strip() for p in filename.split(",")]
+    for exclude in exclude_list:
+        if os.path.exists(exclude):
+            with open(exclude) as f:
+                res.extend([p.strip() for p in f.readlines() if not p.strip().startswith("#")])
+        else:
+            if "," in exclude:
+                res.extend([p.strip() for p in exclude.split(",")])
+            else:
+                res.append(exclude)
 
-    with open(filename) as f:
-        return [l.strip() for l in f.readlines() if not l.strip().startswith("#")]
+    return res
 
 
 def verify_file(filename: str, *, required: bool = True, argname: str = "") -> None:
@@ -664,9 +695,6 @@ def validate_args(args) -> None:
     """
     for f in args.files:
         verify_file(f)
-    verify_file(args.whitelist, required=False)
-    if args.exclude is not None and "," not in args.exclude:
-        verify_file(args.exclude, required=False)
     if args.credits is not None:
         if args.creditstemplate is None:
             here = os.path.abspath(os.path.dirname(__file__))
@@ -691,12 +719,14 @@ def main():
     exclude_packages = get_excluded(args.exclude)
     whitelisting = get_whitelisted(args.whitelist)
 
-    packages = acquire_package_info(args.files, args.type, args.verbose, exclude_packages)
+    packages = acquire_package_info(
+        args.files,
+        args.type,
+        args.verbose,
+        exclude_packages,
+        args.uniq)
     packages = apply_whitelisting(packages, whitelisting)
     print_package_info(packages, SORTORDER[args.order])
-    if detect_unwanted_licenses(packages, args.unwanted):
-        print("Exiting with error level!")
-        exit(1)
     print_packages_to_json(packages, args.json)
     if args.credits is not None:
         create_credits_file(
@@ -704,6 +734,12 @@ def main():
             SORTORDER[args.order if args.order in [0, 1, 2] else 0],
             args.credits,
             args.creditstemplate)
+
+    # Do the detection last. This means the json-file and credits file *will* be generated even of there
+    # are packages with unwanted licenses.
+    if detect_unwanted_licenses(packages, args.unwanted):
+        print("Exiting with error level!")
+        exit(1)
 
 
 if __name__ == '__main__':
